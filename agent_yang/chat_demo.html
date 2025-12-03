@@ -14,11 +14,14 @@
     #box{display:flex;border-top:1px solid #ccc;background:#fff}
     #inp{flex:1;padding:10px;border:none;outline:none;font-size:16px}
     #btn{padding:0 16px;border:none;background:#007aff;color:#fff;font-size:16px}
+    #newChat{padding:0 16px;border:none;background:#34c759;color:#fff;font-size:16px;margin-right:4px}
+    .warning{background:#ff9500;color:#fff;padding:8px 12px;border-radius:8px;margin:6px 0;text-align:center}
   </style>
 </head>
 <body>
   <div id="chat"></div>
   <div id="box">
+    <button id="newChat">新对话</button>
     <input id="inp" placeholder="来问龙牙...">
     <button id="btn">发送</button>
   </div>
@@ -27,11 +30,18 @@
     const chat = document.getElementById('chat');
     const inp  = document.getElementById('inp');
     const btn  = document.getElementById('btn');
+    const newChatBtn = document.getElementById('newChat');
 
     // 初始化消息历史，包含 system prompt
-    const messages = [
-      {role: 'system', content: '你是屠龙的AI小助手"龙牙"，你会模仿屠龙老师的"剑法"（思考逻辑和回答风格）进行回答'}
+    const systemPrompt = '你是屠龙的AI小助手"龙牙"，你会模仿屠龙老师的"剑法"（思考逻辑和回答风格）进行回答。你会用最简洁明了直截了当的方式回答对方的问题';
+    let messages = [
+      {role: 'system', content: systemPrompt}
     ];
+
+    // 计算对话轮次（排除 system，user + assistant 为一轮）
+    function getConversationRounds() {
+      return messages.filter(m => m.role !== 'system').length / 2;
+    }
 
     function append(who, txt) {
       const div = document.createElement('div');
@@ -41,9 +51,26 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
+    // 新对话功能
+    function startNewChat() {
+      messages = [{role: 'system', content: systemPrompt}];
+      chat.innerHTML = '';
+      inp.value = '';
+    }
+
+    newChatBtn.onclick = startNewChat;
+
     btn.onclick = async () => {
       const q = inp.value.trim();
       if (!q) return;
+
+      // 检查对话轮次限制（最多10轮）
+      const currentRounds = getConversationRounds();
+      if (currentRounds >= 5) {
+        append('bot', '⚠️ 对话轮次已达上限（5轮），请点击"新对话"按钮开启新对话');
+        return;
+      }
+
       append('me', q);
       inp.value = '';
 
