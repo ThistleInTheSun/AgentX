@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mini Kimi</title>
+  <style>
+    body { margin:0;font-family:-apple-system; display:flex; flex-direction:column; height:100vh; }
+    #chat { flex:1; overflow:auto; padding:10px; background:#f5f5f5; }
+    .msg { margin:6px 0; }
+    .me { text-align:right; color:#fff; }
+    .me span { background:#007aff; padding:6px 10px; border-radius:12px; display:inline-block; }
+    .bot span { background:#e5e5ea; padding:6px 10px; border-radius:12px; display:inline-block; }
+    #box { display:flex; border-top:1px solid #ccc; background:#fff; }
+    #inp { flex:1; padding:10px; border:none; outline:none; font-size:16px; }
+    #btn { padding:0 16px; border:none; background:#007aff; color:#fff; font-size:16px; }
+  </style>
+</head>
+<body>
+  <div id="chat"></div>
+  <div id="box">
+    <input id="inp" placeholder="问点什么…">
+    <button id="btn">发送</button>
+  </div>
+  <script>
+    const chat = document.getElementById('chat');
+    const inp  = document.getElementById('inp');
+    const btn  = document.getElementById('btn');
+    btn.onclick = async () => {
+      const q = inp.value.trim(); if(!q) return;
+      append('me', q);
+      inp.value = '';
+      const res = await fetch('https://api.kimi.moonshot.cn/v1/chat', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({prompt:q})
+      }).then(r=>r.json());
+      append('bot', res.reply);
+    };
+    function append(who, txt) {
+      const div = document.createElement('div');
+      div.className = 'msg '+who;
+      div.innerHTML = `<span>${txt}</span>`;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+  </script>
+</body>
+</html>
