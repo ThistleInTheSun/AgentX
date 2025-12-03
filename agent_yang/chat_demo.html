@@ -28,6 +28,11 @@
     const inp  = document.getElementById('inp');
     const btn  = document.getElementById('btn');
 
+    // 初始化消息历史，包含 system prompt
+    const messages = [
+      {role: 'system', content: '你是屠龙的AI小助手"龙牙"，你会模仿屠龙老师的"剑法"（思考逻辑和回答风格）进行回答'}
+    ];
+
     function append(who, txt) {
       const div = document.createElement('div');
       div.className = 'msg ' + who;
@@ -41,6 +46,9 @@
       if (!q) return;
       append('me', q);
       inp.value = '';
+
+      // 将用户消息添加到历史记录
+      messages.push({role: 'user', content: q});
 
       // 创建机器人消息容器，用于流式更新
       const botDiv = document.createElement('div');
@@ -59,10 +67,7 @@
           },
           body: JSON.stringify({
             model: 'qwen-turbo',
-            messages: [
-              {role: 'system', content: '你是屠龙的AI小助手“龙牙”，你会模仿屠龙老师的“剑法”（思考逻辑和回答风格）进行回答'},
-              {role: 'user', content: q}
-            ],
+            messages: messages,
             stream: true
           })
         });
@@ -126,6 +131,9 @@
 
         if (!fullText) {
           botSpan.textContent = '无内容';
+        } else {
+          // 将 assistant 的回复添加到历史记录
+          messages.push({role: 'assistant', content: fullText});
         }
       } catch (e) {
         botSpan.textContent = '出错：' + e.message;
