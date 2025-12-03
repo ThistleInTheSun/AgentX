@@ -1,19 +1,19 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Mini Kimi</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>qwen-turbo 聊天</title>
   <style>
-    body { margin:0;font-family:-apple-system; display:flex; flex-direction:column; height:100vh; }
-    #chat { flex:1; overflow:auto; padding:10px; background:#f5f5f5; }
-    .msg { margin:6px 0; }
-    .me { text-align:right; color:#fff; }
-    .me span { background:#007aff; padding:6px 10px; border-radius:12px; display:inline-block; }
-    .bot span { background:#e5e5ea; padding:6px 10px; border-radius:12px; display:inline-block; }
-    #box { display:flex; border-top:1px solid #ccc; background:#fff; }
-    #inp { flex:1; padding:10px; border:none; outline:none; font-size:16px; }
-    #btn { padding:0 16px; border:none; background:#007aff; color:#fff; font-size:16px; }
+    body{margin:0;font-family:-apple-system;display:flex;flex-direction:column;height:100vh}
+    #chat{flex:1;overflow:auto;padding:10px;background:#f5f5f5}
+    .msg{margin:6px 0}
+    .me{text-align:right;color:#fff}
+    .me span{background:#007aff;padding:6px 10px;border-radius:12px;display:inline-block}
+    .bot span{background:#e5e5ea;padding:6px 10px;border-radius:12px;display:inline-block}
+    #box{display:flex;border-top:1px solid #ccc;background:#fff}
+    #inp{flex:1;padding:10px;border:none;outline:none;font-size:16px}
+    #btn{padding:0 16px;border:none;background:#007aff;color:#fff;font-size:16px}
   </style>
 </head>
 <body>
@@ -22,28 +22,112 @@
     <input id="inp" placeholder="问点什么…">
     <button id="btn">发送</button>
   </div>
+
   <script>
     const chat = document.getElementById('chat');
     const inp  = document.getElementById('inp');
     const btn  = document.getElementById('btn');
-    btn.onclick = async () => {
-      const q = inp.value.trim(); if(!q) return;
-      append('me', q);
-      inp.value = '';
-      const res = await fetch('https://api.kimi.moonshot.cn/v1/chat', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({prompt:q})
-      }).then(r=>r.json());
-      append('bot', res.reply);
-    };
+
     function append(who, txt) {
       const div = document.createElement('div');
-      div.className = 'msg '+who;
+      div.className = 'msg ' + who;
       div.innerHTML = `<span>${txt}</span>`;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
+
+    btn.onclick = async () => {
+      const q = inp.value.trim();
+      if (!q) return;
+      append('me', q);
+      inp.value = '';
+
+      // 创建机器人消息容器，用于流式更新
+      const botDiv = document.createElement('div');
+      botDiv.className = 'msg bot';
+      const botSpan = document.createElement('span');
+      botDiv.appendChild(botSpan);
+      chat.appendChild(botDiv);
+      chat.scrollTop = chat.scrollHeight;
+
+      try {
+        const res = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer sk-db92ede8725a4ce8a2d6d65b1318d425'   // ← 改成你的 key
+          },
+          body: JSON.stringify({
+            model: 'qwen-turbo',
+            messages: [{role: 'user', content: q}],
+            stream: true
+          })
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // 保留最后一个不完整的行
+
+          for (const line of lines) {
+            if (line.trim() === '') continue;
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+              
+              try {
+                const json = JSON.parse(data);
+                const delta = json.choices?.[0]?.delta?.content || '';
+                if (delta) {
+                  fullText += delta;
+                  botSpan.textContent = fullText;
+                  chat.scrollTop = chat.scrollHeight;
+                }
+              } catch (e) {
+                // 忽略解析错误
+              }
+            }
+          }
+        }
+
+        // 处理剩余的buffer
+        if (buffer.trim()) {
+          if (buffer.startsWith('data: ')) {
+            const data = buffer.slice(6);
+            if (data !== '[DONE]') {
+              try {
+                const json = JSON.parse(data);
+                const delta = json.choices?.[0]?.delta?.content || '';
+                if (delta) {
+                  fullText += delta;
+                  botSpan.textContent = fullText;
+                }
+              } catch (e) {
+                // 忽略解析错误
+              }
+            }
+          }
+        }
+
+        if (!fullText) {
+          botSpan.textContent = '无内容';
+        }
+      } catch (e) {
+        botSpan.textContent = '出错：' + e.message;
+      }
+    };
   </script>
 </body>
 </html>
