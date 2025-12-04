@@ -1,40 +1,4 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>qwen-turbo 聊天</title>
-  <style>
-    body{margin:0;font-family:-apple-system;display:flex;flex-direction:column;height:100vh}
-    #chat{flex:1;overflow:auto;padding:10px;background:#f5f5f5}
-    .msg{margin:6px 0}
-    .me{text-align:right;color:#fff}
-    .me span{background:#007aff;padding:6px 10px;border-radius:12px;display:inline-block}
-    .bot span{background:#e5e5ea;padding:6px 10px;border-radius:12px;display:inline-block}
-    #box{display:flex;border-top:1px solid #ccc;background:#fff}
-    #inp{flex:1;padding:10px;border:none;outline:none;font-size:16px}
-    #btn{padding:0 16px;border:none;background:#007aff;color:#fff;font-size:16px}
-    #newChat{padding:0 16px;border:none;background:#34c759;color:#fff;font-size:16px;margin-right:4px}
-    .warning{background:#ff9500;color:#fff;padding:8px 12px;border-radius:8px;margin:6px 0;text-align:center}
-  </style>
-</head>
-<body>
-  <div id="chat"></div>
-  <div id="box">
-    <button id="newChat">新对话</button>
-    <input id="inp" placeholder="来问龙牙...">
-    <button id="btn">发送</button>
-  </div>
-
-  <script>
-    const chat = document.getElementById('chat');
-    const inp  = document.getElementById('inp');
-    const btn  = document.getElementById('btn');
-    const newChatBtn = document.getElementById('newChat');
-
-    // 初始化消息历史，包含 system prompt
-    const systemPrompt = `
-【身份设定】你是屠龙的AI小助手"龙牙"，你会模仿屠龙老师的"剑法"（思考逻辑和回答风格）进行回答。以下的answer是屠龙老师的回复样例：
+【身份设定】你是屠龙的AI小助手“龙牙”，你会模仿屠龙老师的“剑法”（思考逻辑和回答风格）进行回答。以下是屠龙老师以往的回复：
 
 【回复样例】
 question：
@@ -295,142 +259,20 @@ answer：
 
 自己好好考虑一下。
 
+【answer风格总结】
+你回复别人的风格核心是：
+思考上：务实解构问题（反鸡汤、拆三步、看资源/风险），基于人性共情给出路。
+行文上：口语网感强（短句、括号表情、流行词），善用市井比喻，节奏利落。
+内容上：建议必带可操作动作，敢于戳破幻想，价值观强调自我负责与长期联结。
+
+模仿关键点：
+解题：将模糊问题拆成2-3个具体点。
+评估：用“你有什么资源/会冒什么险”代替空想。
+共情：从“人都这样”切入，而非单纯安慰。
+表达：写像说话，加括号调侃，比喻要接地气。
+结尾：落脚到可控行动或清醒的长期观念。
+成功标志：读起来像被懂行的朋友犀利点拨，疼但有了方向。
+
 【回复要求】
 现在开始，你来模仿样例中的answer来回复新的question。
-你的回答需要模仿样例中的answer风格，尽量做到一模一样，让人分辨不出是你在回答还是屠龙老师在回答。
-`
-    let messages = [
-      {role: 'system', content: systemPrompt}
-    ];
-
-    // 计算对话轮次（排除 system，user + assistant 为一轮）
-    function getConversationRounds() {
-      return messages.filter(m => m.role !== 'system').length / 2;
-    }
-
-    function append(who, txt) {
-      const div = document.createElement('div');
-      div.className = 'msg ' + who;
-      div.innerHTML = `<span>${txt}</span>`;
-      chat.appendChild(div);
-      chat.scrollTop = chat.scrollHeight;
-    }
-
-    // 新对话功能
-    function startNewChat() {
-      messages = [{role: 'system', content: systemPrompt}];
-      chat.innerHTML = '';
-      inp.value = '';
-    }
-
-    newChatBtn.onclick = startNewChat;
-
-    btn.onclick = async () => {
-      const q = inp.value.trim();
-      if (!q) return;
-
-      // 检查对话轮次限制（最多10轮）
-      const currentRounds = getConversationRounds();
-      if (currentRounds >= 5) {
-        append('bot', '⚠️ 对话轮次已达上限（5轮），请点击"新对话"按钮开启新对话');
-        return;
-      }
-
-      append('me', q);
-      inp.value = '';
-
-      // 将用户消息添加到历史记录
-      messages.push({role: 'user', content: q});
-
-      // 创建机器人消息容器，用于流式更新
-      const botDiv = document.createElement('div');
-      botDiv.className = 'msg bot';
-      const botSpan = document.createElement('span');
-      botDiv.appendChild(botSpan);
-      chat.appendChild(botDiv);
-      chat.scrollTop = chat.scrollHeight;
-
-      try {
-        const res = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer sk-db92ede8725a4ce8a2d6d65b1318d425'   // ← 改成你的 key
-          },
-          body: JSON.stringify({
-            model: 'qwen-turbo',
-            messages: messages,
-            stream: true
-          })
-        });
-
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let fullText = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // 保留最后一个不完整的行
-
-          for (const line of lines) {
-            if (line.trim() === '') continue;
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-              
-              try {
-                const json = JSON.parse(data);
-                const delta = json.choices?.[0]?.delta?.content || '';
-                if (delta) {
-                  fullText += delta;
-                  botSpan.textContent = fullText;
-                  chat.scrollTop = chat.scrollHeight;
-                }
-              } catch (e) {
-                // 忽略解析错误
-              }
-            }
-          }
-        }
-
-        // 处理剩余的buffer
-        if (buffer.trim()) {
-          if (buffer.startsWith('data: ')) {
-            const data = buffer.slice(6);
-            if (data !== '[DONE]') {
-              try {
-                const json = JSON.parse(data);
-                const delta = json.choices?.[0]?.delta?.content || '';
-                if (delta) {
-                  fullText += delta;
-                  botSpan.textContent = fullText;
-                }
-              } catch (e) {
-                // 忽略解析错误
-              }
-            }
-          }
-        }
-
-        if (!fullText) {
-          botSpan.textContent = '无内容';
-        } else {
-          // 将 assistant 的回复添加到历史记录
-          messages.push({role: 'assistant', content: fullText});
-        }
-      } catch (e) {
-        botSpan.textContent = '出错：' + e.message;
-      }
-    };
-  </script>
-</body>
-</html>
+你的回答需要学习样例中的answer风格，可以参考【answer风格总结】
