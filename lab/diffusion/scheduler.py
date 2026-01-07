@@ -235,10 +235,11 @@ class DDPMScheduler:
     ) -> dict:
         """
         单步反向扩散过程：从x_t预测x_{t-1}
+        实现与官方 diffusers DDPMScheduler 保持一致
 
         参数:
             model_output: 模型输出（噪声、图像或速度）
-            timestep: 当前时间步
+            timestep: 当前时间步（int 或 torch.Tensor）
             sample: 当前噪声图像 x_t
             generator: 随机数生成器
             return_dict: 是否返回字典格式
@@ -246,48 +247,48 @@ class DDPMScheduler:
         返回:
             prev_sample: 去噪后的图像 x_{t-1}
         """
-        # 处理时间步
-        if isinstance(timestep, int):
-            timestep = torch.tensor([timestep], device=sample.device, dtype=torch.long)
+        # 处理时间步：转换为标量
+        if isinstance(timestep, torch.Tensor):
+            t = timestep.item()
         else:
-            timestep = timestep.to(sample.device).long()
+            t = int(timestep)
 
-        # 步骤1: 获取当前时间步的相关参数
-        t = timestep
         prev_t = t - 1
 
-        # 确保时间步在合理范围内
-        t = torch.clamp(t, 0, self.num_train_timesteps - 1)
-        prev_t = torch.clamp(prev_t, 0, self.num_train_timesteps - 1)
+        # 1. 计算 alphas 和 betas
+        alpha_prod_t = self.alphas_cumprod[t].to(sample.device)
+        # 当 prev_t < 0 时，使用 1.0（与官方调度器一致）
+        if prev_t >= 0:
+            alpha_prod_t_prev = self.alphas_cumprod[prev_t].to(sample.device)
+        else:
+            alpha_prod_t_prev = torch.tensor(
+                1.0, device=sample.device, dtype=sample.dtype
+            )
+        beta_prod_t = 1 - alpha_prod_t
+        beta_prod_t_prev = 1 - alpha_prod_t_prev
+        current_alpha_t = alpha_prod_t / alpha_prod_t_prev
+        current_beta_t = 1 - current_alpha_t
 
-        # 步骤2: 根据预测类型转换模型输出
+        # 2. 根据预测类型计算 pred_original_sample
         if self.prediction_type == "epsilon":
-            # 模型预测噪声
-            pred_epsilon = model_output
+            # 模型预测噪声，使用公式 (15) 计算 x_0
+            pred_original_sample = (
+                sample - beta_prod_t ** (0.5) * model_output
+            ) / alpha_prod_t ** (0.5)
         elif self.prediction_type == "sample":
             # 模型直接预测去噪后的图像
-            pred_epsilon = (
-                sample - self.sqrt_alphas_cumprod.to(sample.device)[t] * model_output
-            ) / self.sqrt_one_minus_alphas_cumprod.to(sample.device)[t]
+            pred_original_sample = model_output
         elif self.prediction_type == "v_prediction":
             # 模型预测速度
-            pred_epsilon = (
-                self.sqrt_alphas_cumprod.to(sample.device)[t] * model_output
-                + self.sqrt_one_minus_alphas_cumprod.to(sample.device)[t] * sample
+            pred_original_sample = (
+                alpha_prod_t ** (0.5) * sample - beta_prod_t ** (0.5) * model_output
             )
         else:
             raise ValueError(f"Unknown prediction_type: {self.prediction_type}")
 
-        # 步骤3: 计算x_0的估计值
-        # 公式: \hat{x}_0 = \frac{x_t - \sqrt{1 - \bar{\alpha}_t} \epsilon}{\sqrt{\bar{\alpha}_t}}
-        pred_original_sample = (
-            sample
-            - self.sqrt_one_minus_alphas_cumprod.to(sample.device)[t] * pred_epsilon
-        ) / self.sqrt_alphas_cumprod.to(sample.device)[t]
-
-        # 步骤4: 动态阈值（可选）
+        # 3. 裁剪或阈值处理（可选）
         if self.thresholding:
-            # 计算动态阈值
+            # 动态阈值
             s = torch.quantile(
                 torch.abs(pred_original_sample).reshape(
                     pred_original_sample.shape[0], -1
@@ -299,31 +300,32 @@ class DDPMScheduler:
                 -1, *([1] * (pred_original_sample.ndim - 1))
             )
             pred_original_sample = pred_original_sample.clamp(-s, s) / s
-
-        # 步骤5: 裁剪样本到[-1, 1]（可选）
-        if self.clip_sample:
+        elif self.clip_sample:
+            # 裁剪到 [-1, 1]
             pred_original_sample = pred_original_sample.clamp(-1.0, 1.0)
 
-        # 步骤6: 计算x_{t-1}的均值
-        # 公式: \mu_\theta(x_t, t) = \frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon_\theta(x_t, t) \right)
-        model_mean = self.sqrt_recip_alphas.to(sample.device)[t] * (
-            sample
-            - self.betas.to(sample.device)[t]
-            * pred_epsilon
-            / self.sqrt_one_minus_alphas_cumprod.to(sample.device)[t]
+        # 4. 计算系数（公式 (7)）
+        pred_original_sample_coeff = (
+            alpha_prod_t_prev ** (0.5) * current_beta_t
+        ) / beta_prod_t
+        current_sample_coeff = (
+            current_alpha_t ** (0.5) * beta_prod_t_prev
+        ) / beta_prod_t
+
+        # 5. 计算 pred_prev_sample 的均值（公式 (7)）
+        pred_prev_sample = (
+            pred_original_sample_coeff * pred_original_sample
+            + current_sample_coeff * sample
         )
 
-        # 步骤7: 计算方差
-        if t.item() == 0:
-            # 最后一步（t=0），不需要添加噪声
-            variance = 0.0
-            prev_sample = model_mean
-        else:
+        # 6. 添加噪声（方差）
+        variance = 0.0
+        if t > 0:
             # 计算方差
             if self.variance_type == "fixed_small":
-                variance = self.posterior_variance.to(sample.device)[t]
+                variance = self.posterior_variance[t].to(sample.device)
             elif self.variance_type == "fixed_large":
-                variance = self.betas.to(sample.device)[t]
+                variance = self.betas[t].to(sample.device)
             elif self.variance_type == "learned":
                 # 如果模型学习方差，这里需要调整
                 variance = model_output[:, -1:]  # 假设最后通道是方差
@@ -331,22 +333,27 @@ class DDPMScheduler:
                 raise ValueError(f"Unknown variance_type: {self.variance_type}")
 
             # 添加随机噪声
-            noise = torch.randn(
-                model_mean.shape,
-                generator=generator,
-                device=model_mean.device,
-                dtype=model_mean.dtype,
-            )
+            if generator is None:
+                noise = torch.randn(
+                    pred_prev_sample.shape,
+                    device=pred_prev_sample.device,
+                    dtype=pred_prev_sample.dtype,
+                )
+            else:
+                noise = torch.randn(
+                    pred_prev_sample.shape,
+                    generator=generator,
+                    device=pred_prev_sample.device,
+                    dtype=pred_prev_sample.dtype,
+                )
 
-            # 计算最终的x_{t-1}
-            # 公式: x_{t-1} = \mu_\theta(x_t, t) + \sigma_t z
-            prev_sample = model_mean + torch.sqrt(variance) * noise
+            pred_prev_sample = pred_prev_sample + (variance ** (0.5)) * noise
 
         if not return_dict:
-            return prev_sample
+            return pred_prev_sample
 
         return {
-            "prev_sample": prev_sample,
+            "prev_sample": pred_prev_sample,
             "pred_original_sample": pred_original_sample,
         }
 
