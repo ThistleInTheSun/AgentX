@@ -32,12 +32,12 @@ class Config:
         ),
     }
 
-    prediction_type = "epsilon"  #  "epsilon" | "sample" | "v_prediction"
+    prediction_type = "jit"  #  "epsilon" |  "jit"
 
     # 训练相关
     lr = 1e-4
     epochs = 30
-    save_dir = f"./results/init"
+    save_dir = f"./results/jit"
 
 
 config = Config()

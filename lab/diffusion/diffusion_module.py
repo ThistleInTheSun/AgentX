@@ -10,10 +10,10 @@ from torch.optim import Adam
 
 
 class DiffusionExperiment(pl.LightningModule):
-    def __init__(self, prediction_type: str = "epsilon"):
+    def __init__(self, prediction_type):
         super().__init__()
 
-        self.prediction_type = prediction_type  #  "epsilon" | "sample" | "v_prediction"
+        self.prediction_type = prediction_type  #  "epsilon" | "jit"
 
         # 1. 初始化UNet模型（后续可轻松替换为ViT或其他）
         self.model = UNet2DModel(**config.model_config)
@@ -48,14 +48,13 @@ class DiffusionExperiment(pl.LightningModule):
 
         # 根据时间步向图像添加噪声（前向扩散过程）
         if self.prediction_type == "epsilon":
-            noisy_images = self.noise_scheduler.add_noise(images, noise, timesteps)
+            noisy_images, _, _ = self.noise_scheduler.add_noise(
+                images, noise, timesteps
+            )
             # 使用模型预测噪声
             noise_pred = self.model(noisy_images, timesteps).sample
 
-        elif self.prediction_type == "v_prediction":
-            pass
-
-        elif self.prediction_type == "sample":
+        elif self.prediction_type == "jit":
             noisy_images, sqrt_alphas_cumprod_t, sqrt_one_minus_alphas_cumprod_t = (
                 self.noise_scheduler.add_noise(images, noise, timesteps)
             )
@@ -86,13 +85,13 @@ class DiffusionExperiment(pl.LightningModule):
         ).long()
 
         if self.prediction_type == "epsilon":
-            noisy_images = self.noise_scheduler.add_noise(images, noise, timesteps)
+            noisy_images, _, _ = self.noise_scheduler.add_noise(
+                images, noise, timesteps
+            )
             with torch.no_grad():
                 noise_pred = self.model(noisy_images, timesteps).sample
-        elif self.prediction_type == "v_prediction":
-            pass
 
-        elif self.prediction_type == "sample":
+        elif self.prediction_type == "jit":
             noisy_images, sqrt_alphas_cumprod_t, sqrt_one_minus_alphas_cumprod_t = (
                 self.noise_scheduler.add_noise(images, noise, timesteps)
             )

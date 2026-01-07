@@ -11,7 +11,7 @@ def main():
     dm = MNISTDataModule()
 
     # 2. 初始化模型
-    model = DiffusionExperiment()
+    model = DiffusionExperiment(config.prediction_type)
 
     # 3. 设置回调函数
     # 模型检查点：保存最佳模型
@@ -38,7 +38,6 @@ def main():
         callbacks=[checkpoint_callback, early_stop_callback],
         log_every_n_steps=10,
         default_root_dir=config.save_dir,
-        prediction_type=config.prediction_type,
     )
 
     # 5. 开始训练！

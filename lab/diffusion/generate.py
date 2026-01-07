@@ -13,19 +13,20 @@ from config import config
 
 # 加载训练好的模型
 model = DiffusionExperiment.load_from_checkpoint(
-    f"{config.save_dir}/best-checkpoint.ckpt"
+    f"{config.save_dir}/best-checkpoint.ckpt",
+    prediction_type=config.prediction_type,
 )
 print(f"模型加载成功: {config.save_dir}/best-checkpoint.ckpt")
 print(f"采样类型: {model.prediction_type}")
 model.eval()
 model.to("cuda" if torch.cuda.is_available() else "cpu")
 
-# 准备调度器
-noise_scheduler = DDPMScheduler.from_config(
-    {"num_train_timesteps": config.num_train_timesteps}
-)
+# # 准备调度器
+# noise_scheduler = DDPMScheduler.from_config(
+#     {"num_train_timesteps": config.num_train_timesteps}
+# )
 
-# noise_scheduler = model.noise_scheduler
+noise_scheduler = model.noise_scheduler
 
 num_images = 16
 save_path = f"{config.save_dir}/generated_images_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
@@ -41,10 +42,7 @@ with torch.no_grad():
             residual = model.model(sample, t).sample
             sample = noise_scheduler.step(residual, t, sample)["prev_sample"]
 
-        elif model.prediction_type == "v_prediction":
-            pass
-
-        elif model.prediction_type == "sample":
+        elif model.prediction_type == "jit":
             image_pred = model.model(sample, t).sample
             # 获取当前时间步的 sqrt_alphas_cumprod 和 sqrt_one_minus_alphas_cumprod
             # 与训练/验证过程保持一致
