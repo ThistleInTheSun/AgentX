@@ -10,8 +10,10 @@ from torch.optim import Adam
 
 
 class DiffusionExperiment(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, prediction_type: str = "epsilon"):
         super().__init__()
+
+        self.prediction_type = prediction_type  #  "epsilon" | "sample" | "v_prediction"
 
         # 1. 初始化UNet模型（后续可轻松替换为ViT或其他）
         self.model = UNet2DModel(**config.model_config)
@@ -45,10 +47,25 @@ class DiffusionExperiment(pl.LightningModule):
         ).long()
 
         # 根据时间步向图像添加噪声（前向扩散过程）
-        noisy_images = self.noise_scheduler.add_noise(images, noise, timesteps)
+        if self.prediction_type == "epsilon":
+            noisy_images = self.noise_scheduler.add_noise(images, noise, timesteps)
+            # 使用模型预测噪声
+            noise_pred = self.model(noisy_images, timesteps).sample
 
-        # 使用模型预测噪声
-        noise_pred = self.model(noisy_images, timesteps).sample
+        elif self.prediction_type == "v_prediction":
+            pass
+
+        elif self.prediction_type == "sample":
+            noisy_images, sqrt_alphas_cumprod_t, sqrt_one_minus_alphas_cumprod_t = (
+                self.noise_scheduler.add_noise(images, noise, timesteps)
+            )
+
+            # 使用模型预测噪声
+            image_pred = self.model(noisy_images, timesteps).sample
+
+            noise_pred = (
+                noisy_images - sqrt_alphas_cumprod_t * image_pred
+            ) / sqrt_one_minus_alphas_cumprod_t
 
         # 计算简单的MSE损失
         loss = F.mse_loss(noise_pred, noise)
@@ -68,10 +85,24 @@ class DiffusionExperiment(pl.LightningModule):
             device=self.device,
         ).long()
 
-        noisy_images = self.noise_scheduler.add_noise(images, noise, timesteps)
+        if self.prediction_type == "epsilon":
+            noisy_images = self.noise_scheduler.add_noise(images, noise, timesteps)
+            with torch.no_grad():
+                noise_pred = self.model(noisy_images, timesteps).sample
+        elif self.prediction_type == "v_prediction":
+            pass
 
-        with torch.no_grad():
-            noise_pred = self.model(noisy_images, timesteps).sample
+        elif self.prediction_type == "sample":
+            noisy_images, sqrt_alphas_cumprod_t, sqrt_one_minus_alphas_cumprod_t = (
+                self.noise_scheduler.add_noise(images, noise, timesteps)
+            )
+
+            with torch.no_grad():
+                image_pred = self.model(noisy_images, timesteps).sample
+
+                noise_pred = (
+                    noisy_images - sqrt_alphas_cumprod_t * image_pred
+                ) / sqrt_one_minus_alphas_cumprod_t
 
         loss = F.mse_loss(noise_pred, noise)
         self.log("val_loss", loss, prog_bar=True)
@@ -99,8 +130,29 @@ class DiffusionExperiment(pl.LightningModule):
 
             # 逐步去噪（反向扩散过程）
             for t in self.noise_scheduler.timesteps:
-                residual = self.model(sample, t).sample
-                sample = self.noise_scheduler.step(residual, t, sample)["prev_sample"]
+                image_pred = self.model(sample, t).sample
+                # 获取当前时间步的 sqrt_alphas_cumprod 和 sqrt_one_minus_alphas_cumprod
+                # 与训练/验证过程保持一致
+                t_idx = t.item() if isinstance(t, torch.Tensor) else t
+                sqrt_alphas_cumprod_t = self.noise_scheduler.sqrt_alphas_cumprod.to(
+                    sample.device
+                )[t_idx]
+                sqrt_one_minus_alphas_cumprod_t = (
+                    self.noise_scheduler.sqrt_one_minus_alphas_cumprod.to(
+                        sample.device
+                    )[t_idx]
+                )
+                # 调整维度以便广播
+                for _ in range(sample.ndim - 1):
+                    sqrt_alphas_cumprod_t = sqrt_alphas_cumprod_t.unsqueeze(-1)
+                    sqrt_one_minus_alphas_cumprod_t = (
+                        sqrt_one_minus_alphas_cumprod_t.unsqueeze(-1)
+                    )
+                # 将图像预测转换为噪声预测（与训练/验证过程一致）
+                noise_pred = (
+                    sample - sqrt_alphas_cumprod_t * image_pred
+                ) / sqrt_one_minus_alphas_cumprod_t
+                sample = self.noise_scheduler.step(noise_pred, t, sample)["prev_sample"]
 
             # 将生成结果从[-1,1]转换回[0,1]范围
             sample = (sample + 1) / 2
