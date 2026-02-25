@@ -1,0 +1,46 @@
+<!--pages/log/log.wxml-->
+<view class="page-wrap">
+  <image class="page-bg" src="/image.png" mode="aspectFill" />
+  <view class="container">
+  <view class="slogan-card">
+    <text class="slogan">今天也是活力满满的一天~</text>
+  </view>
+
+  <view class="categories" wx:if="{{categories.length > 0}}">
+    <block wx:for="{{categories}}" wx:key="name">
+      <view class="category-card">
+        <view class="category-header">
+          <text class="emoji">{{item.emoji}}</text>
+          <text class="title">{{item.title}}</text>
+        </view>
+        <view class="options options-four">
+          <block wx:for="{{levelOptions}}" wx:for-item="levelOpt" wx:key="value">
+            <button 
+              class="option-btn {{item.value === levelOpt.value ? 'active' : ''}}" 
+              data-category="{{item.name}}" 
+              data-value="{{levelOpt.value}}" 
+              bindtap="handleSelect"
+              hover-class="none"
+            >{{levelOpt.label}}</button>
+          </block>
+        </view>
+        <view class="hint {{item.value !== null ? 'show' : ''}}">
+          <text>当前：{{item.value === 0 ? '无' : (item.value === 1 ? '轻微' : (item.value === 2 ? '中等' : (item.value === 3 ? '超级' : '未选')))}}</text>
+        </view>
+      </view>
+    </block>
+  </view>
+  <view class="categories-empty" wx:if="{{categories.length === 0}}">
+    <text class="categories-empty-text">暂无打卡项目</text>
+    <text class="categories-empty-hint">请到「图表」页右上角「设置」里添加打卡项目</text>
+  </view>
+
+  <view class="action-buttons" wx:if="{{categories.length > 0}}">
+    <button class="submit-btn" bindtap="submitRecord" hover-class="button-hover">今日份已存档 ✨</button>
+  </view>
+
+  <view class="tip">
+    <text>💡 数据保存在手机本地，更换设备或清除缓存会丢失。</text>
+  </view>
+  </view>
+</view>

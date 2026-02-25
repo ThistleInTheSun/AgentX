@@ -1,0 +1,166 @@
+<!--pages/chart/chart.wxml-->
+<view class="page-wrap page-wrap-chart">
+  <image class="page-bg" src="/image.png" mode="aspectFill" />
+  <view class="container">
+  <!-- 天数切换 + 设置 -->
+  <view class="days-selector">
+    <view class="days-options">
+      <text 
+        class="day-option {{days === 90 ? 'active' : ''}}" 
+        data-days="90" 
+        bindtap="switchDays"
+      >90天</text>
+      <text 
+        class="day-option {{days === 180 ? 'active' : ''}}" 
+        data-days="180" 
+        bindtap="switchDays"
+      >180天</text>
+      <text 
+        class="day-option {{days === 365 ? 'active' : ''}}" 
+        data-days="365" 
+        bindtap="switchDays"
+      >365天</text>
+    </view>
+    <text class="settings-link" bindtap="openSettings">设置</text>
+  </view>
+
+  <!-- 热力图 -->
+  <scroll-view class="charts-container" scroll-y>
+    <view class="charts-empty" wx:if="{{categories.length === 0}}">
+      <text class="charts-empty-text">暂无打卡项目</text>
+      <text class="charts-empty-hint">请在「设置」里添加打卡项目</text>
+    </view>
+    <block wx:for="{{categories}}" wx:key="key">
+      <view class="chart-section">
+        <view class="chart-title">
+          <text class="chart-emoji">{{item.emoji}}</text>
+          <text class="chart-name">{{item.name}}</text>
+          <text class="chart-count">({{stats[item.key]}}天)</text>
+        </view>
+        
+        <view class="heatmap-wrap heatmap-days-{{days}}">
+        <scroll-view class="heatmap-scroll" scroll-x>
+          <view class="heatmap-scroll-inner">
+          <view class="heatmap-inner">
+          <!-- 月份行：每列上方标注月份 -->
+          <view class="month-row">
+            <block wx:for="{{monthLabels}}" wx:key="index">
+              <view class="month-col">
+                <text class="month-label">{{item}}</text>
+              </view>
+            </block>
+          </view>
+          <!-- 热力图：每列 7 格（周一到周日），从左到右为时间顺序 -->
+          <view class="heatmap heatmap-by-column">
+            <block wx:for="{{chartDataColumns[item.key]}}" wx:for-item="columnCells" wx:key="index">
+              <view class="heatmap-column">
+                <block wx:for="{{columnCells}}" wx:for-item="cell" wx:key="index">
+                  <view 
+                    wx:if="{{cell.index >= 0}}"
+                    class="day-cell {{selectedCategory === item.key && selectedIndex === cell.index ? 'selected' : ''}}" 
+                    style="background-color: {{item.colorScale[cell.value]}};"
+                    data-category="{{item.key}}"
+                    data-index="{{cell.index}}"
+                    bindtap="onCellTap"
+                  >
+                    <text class="cell-tooltip">{{cell.dateLabel}}</text>
+                  </view>
+                  <view wx:else class="day-cell day-cell-empty"></view>
+                </block>
+              </view>
+            </block>
+          </view>
+          </view>
+          </view>
+        </scroll-view>
+        </view>
+        
+        <view class="legend legend-four">
+          <view class="legend-item" wx:for="{{levelLabels}}" wx:key="*this" wx:for-item="label">
+            <view class="legend-color" style="background-color: {{item.colorScale[index]}};"></view>
+            <text class="legend-label">{{label}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+  </scroll-view>
+
+  <!-- 日期详情 -->
+  <view class="detail-card" wx:if="{{selectedDate}}">
+    <text class="detail-title">📅 {{selectedDate}} 详情</text>
+    <view class="detail-content" wx:if="{{selectedDetails && categories.length > 0}}">
+      <view class="detail-item" wx:for="{{categories}}" wx:key="key">
+        <text class="detail-label">{{item.emoji}} {{item.name}}:</text>
+        <text class="detail-value level-{{selectedDetails[item.key + 'Level']}}">{{selectedDetails[item.key]}}</text>
+      </view>
+    </view>
+    <text class="no-detail" wx:else>当天暂无记录</text>
+  </view>
+
+  <!-- 设置弹层 -->
+  <view class="mask" wx:if="{{showSettings}}" catchtap="closeSettings"></view>
+  <view class="settings-panel" wx:if="{{showSettings}}" catchtap="preventClose">
+    <view class="settings-title">设置</view>
+    <view class="settings-stats">
+      <view class="settings-stat-row">
+        <text class="settings-stat-label">总记录天数</text>
+        <text class="settings-stat-value">{{stats.totalDays}}天</text>
+      </view>
+      <view class="settings-stat-row" wx:for="{{categories}}" wx:key="key">
+        <text class="settings-stat-label">{{item.emoji}} {{item.name}}</text>
+        <text class="settings-stat-value">{{stats[item.key]}}天</text>
+      </view>
+    </view>
+    <view class="settings-section-title">打卡项目</view>
+    <view class="settings-category-list" wx:if="{{categories.length > 0}}">
+      <view class="settings-category-row" wx:for="{{categories}}" wx:key="key">
+        <text class="settings-category-name">{{item.emoji}} {{item.name}}</text>
+        <text class="settings-category-delete" data-key="{{item.key}}" bindtap="removeCategory">删除</text>
+      </view>
+    </view>
+    <view class="settings-item settings-item-add" bindtap="showAddCategoryForm" wx:if="{{!showAddCategory}}">➕ 添加打卡项目</view>
+    <view class="settings-add-form" wx:if="{{showAddCategory}}">
+      <input class="settings-add-input" placeholder="项目名称" value="{{newCategoryName}}" bindinput="onNewCategoryNameInput" />
+      <input class="settings-add-input" placeholder="emoji 如 📌" value="{{newCategoryEmoji}}" bindinput="onNewCategoryEmojiInput" />
+      <view class="settings-add-btns">
+        <text class="settings-add-btn" bindtap="cancelAddCategory">取消</text>
+        <text class="settings-add-btn primary" bindtap="confirmAddCategory">确定</text>
+      </view>
+    </view>
+    <view class="settings-item" bindtap="onExportData">📤 导出数据</view>
+    <view class="settings-item" bindtap="openEditHistory">📝 编辑历史记录</view>
+  </view>
+
+  <!-- 编辑历史记录弹层 -->
+  <view class="mask" wx:if="{{showEditHistory}}" catchtap="closeEditHistory"></view>
+  <view class="edit-panel" wx:if="{{showEditHistory}}" catchtap="preventClose">
+    <view class="edit-panel-title">编辑历史记录</view>
+    <view class="edit-date-row">
+      <text class="edit-date-label">选择日期</text>
+      <picker mode="date" value="{{editDate}}" bindchange="onEditDateChange">
+        <view class="edit-date-value">{{editDate || '请选择'}}</view>
+      </picker>
+    </view>
+    <view class="edit-categories">
+      <view class="edit-cat" wx:for="{{editCategories}}" wx:key="name">
+        <view class="edit-cat-header">
+          <text class="edit-cat-emoji">{{item.emoji}}</text>
+          <text class="edit-cat-title">{{item.title}}</text>
+        </view>
+        <view class="edit-cat-options">
+          <block wx:for="{{levelOptions}}" wx:for-item="levelOpt" wx:key="value">
+            <button 
+              class="edit-option-btn {{item.value === levelOpt.value ? 'active' : ''}}" 
+              data-category="{{item.name}}" 
+              data-value="{{levelOpt.value}}" 
+              bindtap="onEditSelect"
+              hover-class="none"
+            >{{levelOpt.label}}</button>
+          </block>
+        </view>
+      </view>
+    </view>
+    <button class="edit-save-btn" bindtap="saveEditRecord">保存</button>
+  </view>
+  </view>
+</view>

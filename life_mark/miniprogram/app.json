@@ -1,0 +1,28 @@
+{
+  "pages": [
+    "pages/log/log",
+    "pages/chart/chart"
+  ],
+  "window": {
+    "navigationBarTitleText": "每日星光",
+    "navigationBarBackgroundColor": "#0a0a0f",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0a0a0f"
+  },
+  "tabBar": {
+    "color": "#6b6b6b",
+    "selectedColor": "#e8e4dc",
+    "backgroundColor": "#0f0f14",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/log/log",
+        "text": "记录"
+      },
+      {
+        "pagePath": "pages/chart/chart",
+        "text": "图表"
+      }
+    ]
+  }
+}
