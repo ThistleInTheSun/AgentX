@@ -1,0 +1,9 @@
+# 本类别的参数与推送时间（仅对本类别生效）
+params:
+  feed: top   # top | new | best
+  limit: 10
+
+schedule:
+  time: "09:15"
+  window: "24h"
+  # timezone: Asia/Shanghai  # 可选，不写则用主 config 的 timezone

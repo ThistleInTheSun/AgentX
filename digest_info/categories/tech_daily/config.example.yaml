@@ -1,0 +1,16 @@
+# 复制为 config.yaml 后按需修改。每日 9:15 推送过去 24 小时内容。
+params:
+  limit_news: 15
+  limit_papers: 10
+  # 可选：自定义科技新闻 RSS，格式为 [(url, 显示名), ...]
+  # feed_urls:
+  #   - ["https://techcrunch.com/feed/", "TechCrunch"]
+  #   - ["https://www.theverge.com/rss/index.xml", "The Verge"]
+  #   - ["https://feeds.arstechnica.com/arstechnica/index", "Ars Technica"]
+  # 可选：arXiv 子类
+  # arxiv_categories: ["cs.AI", "cs.LG", "cs.CL", "cs.CV"]
+
+schedule:
+  time: "09:15"
+  window: "24h"
+  # timezone: Asia/Shanghai  # 可选，不写则用主 config

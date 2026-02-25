@@ -1,0 +1,9 @@
+# 本类别的参数与推送时间（仅对本类别生效）
+params:
+  feed_url: "https://hnrss.org/frontpage"  # 换成你的 RSS 地址
+  limit: 5
+
+schedule:
+  time: "08:00"
+  days: [0, 1, 2, 3, 4]   # 周一至周五
+  # window: "24h"          # 可选

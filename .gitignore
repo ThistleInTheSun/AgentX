@@ -3,3 +3,5 @@ data
 results
 *.png
 *.jpg
+info_digest/config.yaml
+digest_info/config.yaml
