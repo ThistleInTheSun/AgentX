@@ -1,6 +1,6 @@
 """
 科技新闻多 RSS 聚合源：从多个 RSS 拉取条目，并按「过去 N 小时」过滤。
-默认包含 TechCrunch、The Verge、Ars Technica。
+默认使用国内可访问的科技源：少数派、Solidot、36氪、阮一峰。
 """
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -10,11 +10,12 @@ from ..core.source import Source, SearchResult, SourceRegistry
 
 ATOM_NS = "http://www.w3.org/2005/Atom"
 
-# 默认科技新闻 RSS 列表（可被配置覆盖）
+# 默认科技新闻 RSS 列表（国内可访问，可被配置覆盖）
 DEFAULT_FEED_URLS = [
-    ("https://techcrunch.com/feed/", "TechCrunch"),
-    ("https://www.theverge.com/rss/index.xml", "The Verge"),
-    ("https://feeds.arstechnica.com/arstechnica/index", "Ars Technica"),
+    ("https://sspai.com/feed", "少数派"),
+    ("https://www.solidot.org/index.rss", "Solidot"),
+    ("https://36kr.com/feed", "36氪"),
+    ("https://www.ruanyifeng.com/blog/atom.xml", "阮一峰"),
 ]
 
 
@@ -61,8 +62,8 @@ def _fetch_one_feed(
     try:
         r = requests.get(
             feed_url,
-            timeout=15,
-            headers={"User-Agent": "InfoDigest/1.0"},
+            timeout=20,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; InfoDigest/1.0)"},
         )
         r.raise_for_status()
         root = ET.fromstring(r.content)
@@ -75,11 +76,26 @@ def _fetch_one_feed(
                 source_id=source_label,
             )
         ]
+    results = _parse_feed_items(root, source_label, cutoff, limit_per_feed)
+    # 时间窗口内无结果时回退：取最近 N 条（不按时间过滤），避免推送为空
+    if not results and cutoff is not None:
+        results = _parse_feed_items(root, source_label, None, limit_per_feed)
+    return results[:limit_per_feed]
+
+
+def _parse_feed_items(
+    root: ET.Element,
+    source_label: str,
+    cutoff: datetime | None,
+    limit_per_feed: int,
+) -> list[SearchResult]:
     results = []
     channel = root.find("channel")
     if channel is not None:
         # RSS 2.0
-        for item in channel.findall("item")[: limit_per_feed * 2]:
+        for item in channel.findall("item")[: limit_per_feed * 3]:
+            if len(results) >= limit_per_feed:
+                break
             title_el = item.find("title")
             link_el = item.find("link")
             desc_el = item.find("description")
@@ -99,8 +115,6 @@ def _fetch_one_feed(
                         source_id=source_label,
                     )
                 )
-            if len(results) >= limit_per_feed:
-                break
     else:
         # Atom
         for entry in root.findall(f".//{{{ATOM_NS}}}entry"):
@@ -125,7 +139,7 @@ def _fetch_one_feed(
                         source_id=source_label,
                     )
                 )
-    return results[:limit_per_feed]
+    return results
 
 
 @SourceRegistry.register("tech_news_feeds")

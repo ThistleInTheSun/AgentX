@@ -25,7 +25,7 @@ def _parse_arxiv_feed(xml_content: bytes, source_id: str) -> list[SearchResult]:
         link = link_el.get("href", "") if link_el is not None else ""
         if not link and id_el is not None and id_el.text:
             link = id_el.text.replace("/abs/", "/abs/").strip()
-        if not title:
+        if not title or title.strip().lower() == "error":
             continue
         results.append(
             SearchResult(
@@ -37,6 +37,25 @@ def _parse_arxiv_feed(xml_content: bytes, source_id: str) -> list[SearchResult]:
             )
         )
     return results
+
+
+def fetch_one_paper_by_id(paper_id: str) -> list[SearchResult]:
+    """
+    按 arXiv 编号拉取单篇论文（用于测试）。例如 paper_id="1706.03762"。
+    返回与 _parse_arxiv_feed 相同格式的列表，失败或解析不到则返回 []。
+    """
+    url = "http://export.arxiv.org/api/query"
+    try:
+        r = requests.get(
+            url,
+            params={"id_list": paper_id},
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; InfoDigest/1.0)"},
+        )
+        r.raise_for_status()
+        return _parse_arxiv_feed(r.content, "arXiv")
+    except Exception:
+        return []
 
 
 @SourceRegistry.register("arxiv")
@@ -58,29 +77,24 @@ class ArxivSource(Source):
 
     def fetch(self, window_hours: int | None = None, limit: int | None = None, **kwargs) -> list[SearchResult]:
         limit = limit or self.limit
-        now = datetime.now(timezone.utc)
-        if window_hours is None:
-            window_hours = 24
-        start_dt = now - timedelta(hours=window_hours)
-        # arXiv API 要求 GMT，格式 YYYYMMDDHHmm
-        start_str = start_dt.strftime("%Y%m%d%H%M")
-        end_str = now.strftime("%Y%m%d%H%M")
-        # 构建 cat 查询：cat:cs.AI OR cat:cs.LG ...
-        cat_query = "+OR+".join(f"cat:{c}" for c in self.categories)
-        date_query = f"submittedDate:[{start_str}+TO+{end_str}]"
-        search_query = f"({cat_query})+AND+{date_query}"
-        params = {
-            "search_query": search_query,
-            "start": 0,
-            "max_results": min(limit, 100),
-            "sortBy": "submittedDate",
-            "sortOrder": "descending",
-        }
         url = "http://export.arxiv.org/api/query"
+        # 分类条件：cat:cs.AI+OR+cat:cs.LG+...（不加括号，兼容 API）
+        cat_query = "+OR+".join(f"cat:{c}" for c in self.categories)
         try:
-            r = requests.get(url, params=params, timeout=30, headers={"User-Agent": "InfoDigest/1.0"})
-            r.raise_for_status()
-            results = _parse_arxiv_feed(r.content, self.source_id)
+            # 先尝试带时间范围（arXiv 支持 submittedDate:[YYYYMMDD TO YYYYMMDD]）
+            if window_hours is not None and window_hours > 0:
+                now = datetime.now(timezone.utc)
+                start_dt = now - timedelta(hours=window_hours)
+                start_str = start_dt.strftime("%Y%m%d")
+                end_str = now.strftime("%Y%m%d")
+                date_query = f"submittedDate:[{start_str}+TO+{end_str}]"
+                search_query = f"{cat_query}+AND+{date_query}"
+                results = self._query_arxiv(url, search_query, limit)
+            else:
+                results = []
+            # 时间窗口内 0 条时回退：只按分类取最近 N 条
+            if not results:
+                results = self._query_arxiv(url, cat_query, limit)
             return results[:limit]
         except Exception as e:
             return [
@@ -91,3 +105,15 @@ class ArxivSource(Source):
                     source_id=self.source_id,
                 )
             ]
+
+    def _query_arxiv(self, url: str, search_query: str, limit: int) -> list[SearchResult]:
+        params = {
+            "search_query": search_query,
+            "start": 0,
+            "max_results": min(limit, 100),
+            "sortBy": "submittedDate",
+            "sortOrder": "descending",
+        }
+        r = requests.get(url, params=params, timeout=30, headers={"User-Agent": "Mozilla/5.0 (compatible; InfoDigest/1.0)"})
+        r.raise_for_status()
+        return _parse_arxiv_feed(r.content, self.source_id)

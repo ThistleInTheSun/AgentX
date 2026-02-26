@@ -4,9 +4,9 @@ timezone: Asia/Shanghai
 
 # 启用的类别 id 列表，顺序即推送顺序；每个类别的 params、schedule 从 categories/<id>/config.yaml 读
 categories:
-  - hackernews
+  # - hackernews
   # - rss
-  # - tech_daily   # 每日 9:15 推送过去 24h 科技新闻 + arXiv 新论文；启用前请复制 categories/tech_daily/config.example.yaml 为 config.yaml
+  - tech_daily   # 每日 9:15 推送过去 24h 科技新闻 + arXiv 新论文；启用前请复制 categories/tech_daily/config.example.yaml 为 config.yaml
 
 summarizer: plain
 # 使用大模型总结时改为 summarizer: llm，并配置 summarizer_params（建议 api_key 用环境变量 OPENAI_API_KEY）

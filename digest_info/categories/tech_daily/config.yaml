@@ -1,8 +1,8 @@
-# 每日 9:15 推送过去 24 小时科技新闻 + arXiv 新论文
+# 每日 9:15 推送过去一周科技新闻 + arXiv 新论文
 params:
   limit_news: 15
   limit_papers: 10
 
 schedule:
   time: "09:15"
-  window: "24h"
+  window: "7d"
