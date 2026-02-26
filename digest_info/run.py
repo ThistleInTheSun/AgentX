@@ -153,6 +153,14 @@ def run_test_full():
     results = source.fetch(window_hours=24 * 7, limit=_TEST_FULL_LIMIT)
     if not results:
         print("拉取失败：过去一周未获取到论文（请检查网络或代理）。")
+        # 调试：单分类+日期 query（与脚本实际请求一致），可在浏览器打开验证
+        from datetime import datetime, timezone, timedelta
+        from urllib.parse import quote
+        now = datetime.now(timezone.utc)
+        start = (now - timedelta(hours=24 * 7)).strftime("%Y%m%d%H%M")
+        end = now.strftime("%Y%m%d%H%M")
+        q = f"cat:cs.AI+AND+submittedDate:[{start}+TO+{end}]"
+        print(f"  调试 URL: http://export.arxiv.org/api/query?search_query={quote(q, safe='')}&sortBy=submittedDate&sortOrder=descending&max_results=10")
         return
     summarizer = SummarizerRegistry.get("plain")
     body = summarizer.summarize(
