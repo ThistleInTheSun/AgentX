@@ -80,10 +80,30 @@ def run_once(dry_run: bool = False) -> int:
     return 0
 
 
+def push_draft(md_path: str) -> int:
+    """把已生成的本地 Markdown 草稿推送到公众号草稿箱（不重新翻译）。"""
+    from pathlib import Path
+
+    md = Path(md_path).read_text(encoding="utf-8")
+    first_line = md.splitlines()[0]
+    title = first_line.lstrip("# ").split("|", 1)[-1].strip()
+    m = re.search(r"> 链接：(\S+)", md)
+    source_url = m.group(1) if m else ""
+    wechat_draft.create_draft(
+        title=title,
+        markdown=md,
+        source_url=source_url,
+        digest=f"外刊精读 | {title}",
+    )
+    print(f"已推送到公众号草稿箱：{title}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="每日外刊精读流水线")
     parser.add_argument("--dry-run", action="store_true", help="只测试选文，不调 LLM/公众号")
     parser.add_argument("--upload-thumb", metavar="IMAGE", help="上传公众号封面图并打印 media_id")
+    parser.add_argument("--push", metavar="MD_FILE", help="把已有的本地 Markdown 草稿推送到公众号草稿箱")
     args = parser.parse_args()
 
     config.load_env()
@@ -95,6 +115,8 @@ def main() -> int:
             media_id = wechat_draft.upload_thumb(args.upload_thumb)
             print(f"media_id: {media_id}\n请写入 .env: WECHAT_THUMB_MEDIA_ID={media_id}")
             return 0
+        if args.push:
+            return push_draft(args.push)
         return run_once(dry_run=args.dry_run)
     except Exception:
         log.exception("流水线执行失败")
