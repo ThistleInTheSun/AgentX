@@ -137,3 +137,18 @@ def create_draft(title: str, markdown: str, source_url: str, digest: str = "") -
         raise WeChatError(f"写入草稿箱失败: {resp}")
     log.info("已写入公众号草稿箱 media_id=%s", resp["media_id"])
     return resp["media_id"]
+
+
+def publish(media_id: str) -> str:
+    """把草稿发布到公众号主页（不推送给粉丝），返回 publish_id。"""
+    token = _access_token()
+    resp = requests.post(
+        f"{API}/freepublish/submit",
+        params={"access_token": token},
+        json={"media_id": media_id},
+        timeout=60,
+    ).json()
+    if resp.get("errcode") != 0:
+        raise WeChatError(f"发布失败: {resp}")
+    log.info("已提交发布 publish_id=%s", resp.get("publish_id"))
+    return str(resp.get("publish_id", ""))

@@ -63,15 +63,18 @@ def run_once(dry_run: bool = False) -> int:
     status = "drafted"
     if wechat_draft.credentials_ready():
         try:
-            wechat_draft.create_draft(
+            media_id = wechat_draft.create_draft(
                 title=article.title,
                 markdown=md,
                 source_url=article.url,
                 digest=f"外刊精读 | {article.title}",
             )
-            status = "published_to_wechat"
+            status = "drafted_to_wechat"
+            if config.get("WECHAT_AUTO_PUBLISH") == "1":
+                wechat_draft.publish(media_id)
+                status = "published_to_wechat"
         except wechat_draft.WeChatError as e:
-            log.error("公众号草稿写入失败（本地 Markdown 已保存）：%s", e)
+            log.error("公众号操作失败（本地 Markdown 已保存，当前状态 %s）：%s", status, e)
     else:
         log.info("未配置公众号凭证，跳过草稿箱写入（见 README）")
 
@@ -89,13 +92,16 @@ def push_draft(md_path: str) -> int:
     title = first_line.lstrip("# ").split("|", 1)[-1].strip()
     m = re.search(r"> 链接：(\S+)", md)
     source_url = m.group(1) if m else ""
-    wechat_draft.create_draft(
+    media_id = wechat_draft.create_draft(
         title=title,
         markdown=md,
         source_url=source_url,
         digest=f"外刊精读 | {title}",
     )
     print(f"已推送到公众号草稿箱：{title}")
+    if config.get("WECHAT_AUTO_PUBLISH") == "1":
+        wechat_draft.publish(media_id)
+        print("已提交发布到主页（不推送粉丝）")
     return 0
 
 

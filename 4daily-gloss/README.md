@@ -25,12 +25,14 @@ cp .env.example .env              # 填入你的 Key
 | `WECHAT_APPSECRET` | 否 | 公众号 AppSecret |
 | `WECHAT_THUMB_MEDIA_ID` | 否 | 草稿封面图 media_id（草稿箱接口必须有封面），获取方式见下 |
 | `WECHAT_AUTHOR` | 否 | 草稿显示的作者名 |
+| `WECHAT_AUTO_PUBLISH` | 否 | 设为 `1`：草稿写入后自动「发布」到公众号主页（不推送粉丝；群发/定时群发仍需在后台手动操作） |
 
 ## 手动跑一次
 
 ```bash
-python run.py            # 完整流水线：选文 → 翻译 → 生词 → 组装 → 草稿
+python run.py            # 完整流水线：选文 → 翻译 → 生词 → 组装 → 草稿（→ 自动发布）
 python run.py --dry-run  # 只测试选文，不调 LLM / 公众号
+python run.py --push drafts/xxx.md  # 把已有本地草稿推送到草稿箱（不重新翻译）
 ```
 
 成功后：
@@ -54,29 +56,29 @@ python run.py --dry-run  # 只测试选文，不调 LLM / 公众号
 
 3. 再跑 `python run.py`，即写入草稿箱。写入失败时会自动降级：本地 Markdown 已保存，日志有错误详情。
 
-## 定时任务
+## 定时任务（已配置方案）
 
-### Windows 计划任务
-
-1. 打开「任务计划程序」→ 创建基本任务
-2. 触发器：每天（建议早上 7:00）
-3. 操作：启动程序
-   - 程序：`python`（或 `C:\Python3xx\python.exe` 完整路径）
-   - 参数：`run.py`
-   - 起始于：本项目目录（如 `D:\xq\AgentX\4daily-gloss`）
-
-或命令行一次性创建：
+当前方案：**Windows 计划任务** 每天 20:00 调用 WSL 执行 `daily_run.sh`（WSL 未启动也会被自动唤醒）：
 
 ```bat
-schtasks /create /tn daily-gloss /tr "python D:\xq\AgentX\4daily-gloss\run.py" /sc daily /st 07:00
+schtasks /create /tn daily-gloss /tr "wsl.exe -d Ubuntu-22.04 -- bash /mnt/d/xq/AgentX/4daily-gloss/daily_run.sh" /sc daily /st 20:00 /f
 ```
 
-### Linux / WSL cron
+- 日志：`logs/cron.log`（脚本输出）+ `logs/日期.log`（详细日志）
+- 删除任务：`schtasks /delete /tn daily-gloss /f`
+- 改时间：重跑上面命令换 `/st` 即可
+
+**推荐日常节奏**（个人订阅号无法 API 群发）：
+
+1. 每晚 20:00 自动：生成草稿 → 写入草稿箱 → 发布上主页
+2. 晚上你花 1 分钟：检查草稿 → 后台设「定时群发」到次日早 7:00
+3. 微信次日自动推送给粉丝
+
+### 备选：纯 WSL cron（需 WSL 常驻）
 
 ```bash
 crontab -e
-# 每天 7:00
-0 7 * * * cd /mnt/d/xq/AgentX/4daily-gloss && python3 run.py >> logs/cron.log 2>&1
+0 20 * * * cd /mnt/d/xq/AgentX/4daily-gloss && python3 run.py >> logs/cron.log 2>&1
 ```
 
 ## 版权说明
